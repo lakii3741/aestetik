@@ -9,7 +9,8 @@ def preprocess_adata(
         pca_n_comps=15,
         variances_norm_cutoff=1,
         n_top_genes=None,
-        use_highly_variable=True):
+        use_highly_variable=True,
+        batch_key=None):
     """
     Preprocess the anndata object.
 
@@ -29,7 +30,8 @@ def preprocess_adata(
         Number of top genes to select based on variability. If None, no selection is applied.
     use_highly_variable : bool, optional (default=True)
         Whether to use highly variable genes during preprocessing.
-
+    batch_key: str
+        If specified, highly-variable genes are selected within each batch (e.g. "sample", "donor") separately and merged.
     Returns
     -------
     adata : anndata
@@ -43,7 +45,7 @@ def preprocess_adata(
 
     sc.pp.filter_genes(adata, min_cells=min_cells_filter)
     # @https://github.com/scverse/scanpy/blob/ed3b277b2f498e3cab04c9416aaddf97eec8c3e2/scanpy/preprocessing/_highly_variable_genes.py#L112C9-L112C22
-    sc.pp.highly_variable_genes(adata, flavor="seurat_v3", n_top_genes=n_top_genes)
+    sc.pp.highly_variable_genes(adata, flavor="seurat_v3", n_top_genes=n_top_genes, batch_key=batch_key)
     # select high variable genes
     adata = adata[:, adata.var.variances_norm >= variances_norm_cutoff]
 
