@@ -21,7 +21,7 @@ class AESTETIKDataModule(L.LightningDataModule):
                  grid_params: dict,
                  loss_regularization_params: dict,
                  data_handling_params: dict,
-                 used_obs_batch: Optional[str] = None,
+                 used_obs_sample: Optional[str] = None,
                 ):
         super().__init__()
         """
@@ -72,8 +72,8 @@ class AESTETIKDataModule(L.LightningDataModule):
                     Number of parallel jobs to run while building the grid.
                 -'train_size': Optional[float]
                     Size of the training set. If float, should be between 0.0 and 1.0 and represent the proportion of the dataset to include in the train split. If int, represents the absolute number of train samples. If None, the value is automatically set to the complement of the test size.
-        used_obs_batch: Optional[str], optional (default=None)
-            Key for column in `obs` that differentiates among experiments or batches.
+        used_obs_sample: Optional[str], optional (default=None)
+            Key for column in `obs` that contains sample labels.
         validation_split: float
             Size of the validation set. It should be between 0.0 and 1.0 and represent the proportion of the dataset to include in the validation split.
         """
@@ -84,7 +84,7 @@ class AESTETIKDataModule(L.LightningDataModule):
                         "used_obsm_morphology": used_obsm_morphology,
                         "used_obsm_combined": used_obsm_combined}
         self.used_obs = {
-                        "used_obs_batch": used_obs_batch}
+                        "used_obs_sample": used_obs_sample}
         self.dataloader_params = dataloader_params
         self.clustering_params = clustering_params 
         self.grid_params = grid_params

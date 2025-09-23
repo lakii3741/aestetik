@@ -55,7 +55,7 @@ def create_st_grid(adata: anndata,
                    used_obsm: str,
                    window_size: int,
                    cpu_count: int,
-                   used_obs_batch: Optional[str] = None) -> np.ndarray:
+                   used_obs_sample: Optional[str] = None) -> np.ndarray:
     """
     Creates a grid of features for each spot. Then it stores the result in adata.obsm['st_grid'].
     """
@@ -66,18 +66,18 @@ def create_st_grid(adata: anndata,
 
     n_spots, dim_emb = embs.shape
 
-    if used_obs_batch is not None and used_obs_batch in adata.obs.columns:
-        batch_labels = adata.obs[used_obs_batch].astype("category").cat.codes.to_numpy()
+    if used_obs_sample is not None and used_obs_sample in adata.obs.columns:
+        sample_labels = adata.obs[used_obs_sample].astype("category").cat.codes.to_numpy()
     else:
         logging.info(
-            "No batch column specified or found in adata.obs. "
+            "No sample label column specified or found in adata.obs. "
             "We treat all data as coming from a single tissue slice."
         )
-        batch_labels = np.zeros(len(x_array), dtype=int)
+        sample_labels = np.zeros(len(x_array), dtype=int)
     
-    trees, batch_to_indices = _build_trees(x_array=x_array,
+    trees, sample_to_indices = _build_trees(x_array=x_array,
                                            y_array=y_array,
-                                           batch_labels=batch_labels)
+                                           sample_labels=sample_labels)
     
     half = window_size // 2
     offsets_flat = _compute_offsets_flat(start=-half, end=-half + window_size)
@@ -85,23 +85,23 @@ def create_st_grid(adata: anndata,
     x_array.setflags(write=False)
     y_array.setflags(write=False)
     embs.setflags(write=False)
-    batch_labels.setflags(write=False)
+    sample_labels.setflags(write=False)
     offsets_flat.setflags(write=False)
 
-    batch_indices = np.array_split(range(n_spots), cpu_count)
-    delayed_create_batch_grid = delayed(_create_batch_grid)
+    sample_indices = np.array_split(range(n_spots), cpu_count)
+    delayed_create_sample_grid = delayed(_create_sample_grid)
 
     spot_grid = Parallel(n_jobs=cpu_count,
                        prefer="threads")(
-                        delayed_create_batch_grid(spot_indices=spot_indices,
+                        delayed_create_sample_grid(spot_indices=spot_indices,
                                                   x_array=x_array,
                                                   y_array=y_array,
-                                                  batch_labels=batch_labels,
+                                                  sample_labels=sample_labels,
                                                   embs=embs,
                                                   trees=trees,
-                                                  batch_to_indices=batch_to_indices,
+                                                  sample_to_indices=sample_to_indices,
                                                   offsets_flat=offsets_flat,
-                                                  window_size=window_size) for spot_indices in batch_indices
+                                                  window_size=window_size) for spot_indices in sample_indices
                        )
     spot_grid = np.concatenate(spot_grid)
     spot_grid = np.moveaxis(spot_grid, 3, 1)
@@ -109,71 +109,71 @@ def create_st_grid(adata: anndata,
 
 def _build_trees(x_array: np.ndarray,
                  y_array: np.ndarray,
-                 batch_labels: np.ndarray) -> Tuple[Dict[int, KDTree], Dict[int, np.ndarray]]:
-    batch_ids = np.unique(batch_labels)
+                 sample_labels: np.ndarray) -> Tuple[Dict[int, KDTree], Dict[int, np.ndarray]]:
+    sample_ids = np.unique(sample_labels)
     trees = dict()
-    batch_to_indices = dict()
+    sample_to_indices = dict()
 
-    for batch_id in batch_ids:
-        spot_indices = np.where(batch_labels == batch_id)[0]
+    for sample_id in sample_ids:
+        spot_indices = np.where(sample_labels == sample_id)[0]
         coords = np.column_stack([x_array[spot_indices], y_array[spot_indices]])
-        trees[batch_id] = KDTree(coords)
-        batch_to_indices[batch_id] = spot_indices 
+        trees[sample_id] = KDTree(coords)
+        sample_to_indices[sample_id] = spot_indices 
     
-    return trees, batch_to_indices
+    return trees, sample_to_indices
 
-def _create_batch_grid(spot_indices: np.ndarray,
+def _create_sample_grid(spot_indices: np.ndarray,
                        x_array: np.ndarray,
                        y_array: np.ndarray,
-                       batch_labels: np.ndarray,
+                       sample_labels: np.ndarray,
                        embs: np.ndarray,
                        trees: Dict, 
-                       batch_to_indices: Dict,
+                       sample_to_indices: Dict,
                        offsets_flat: np.ndarray,
                        window_size: int) -> List[np.ndarray]:
-    batch_grids = []
+    sample_grids = []
     for spot_index in spot_indices:
         spot = _create_spot(spot_idx=spot_index,
                             x_array=x_array,
                             y_array=y_array,
-                            batch_labels=batch_labels,
+                            sample_labels=sample_labels,
                             embs=embs,
                             trees=trees,
-                            batch_to_indices=batch_to_indices,
+                            sample_to_indices=sample_to_indices,
                             offsets_flat=offsets_flat,
                             window_size=window_size)
-        batch_grids.append(spot)
-    return batch_grids
+        sample_grids.append(spot)
+    return sample_grids
 
 def _create_spot(spot_idx: int,
                  x_array: np.ndarray,
                  y_array: np.ndarray,
-                 batch_labels: np.ndarray, 
+                 sample_labels: np.ndarray, 
                  embs:np.ndarray,
                  trees: Dict, 
-                 batch_to_indices: Dict,
+                 sample_to_indices: Dict,
                  offsets_flat: np.ndarray,
                  window_size: int) -> np.ndarray:
     """
     Creates a grid for a single spot.
     """
-    x_center, y_center, batch_id = x_array[spot_idx], y_array[spot_idx], batch_labels[spot_idx]
+    x_center, y_center, sample_id = x_array[spot_idx], y_array[spot_idx], sample_labels[spot_idx]
     center = np.array([x_center, y_center]) 
   
     grid = np.full((window_size, window_size, embs.shape[1]), 
                     fill_value=np.nan,
                     dtype=embs.dtype)
-    indices_in_batch = batch_to_indices[batch_id]
+    indices_in_sample = sample_to_indices[sample_id]
 
     for offset_idx, (dx_offset, dy_offset) in enumerate(offsets_flat):
         position = center + np.array([dx_offset, dy_offset])
-        distance, neighbor_idx = trees[batch_id].query(position)
+        distance, neighbor_idx = trees[sample_id].query(position)
         if distance > 0:
             continue
         grid_row, grid_column = np.unravel_index(offset_idx,
                                            shape=(window_size, window_size))
 
-        grid[grid_row, grid_column] = embs[indices_in_batch[neighbor_idx]]
+        grid[grid_row, grid_column] = embs[indices_in_sample[neighbor_idx]]
     
     median_spot = np.nanmedian(grid, axis=(0, 1))
     nan_indices = np.where(np.isnan(grid))

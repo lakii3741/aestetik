@@ -181,7 +181,7 @@ class AESTETIK:
             used_obsm_transcriptomics: str = "X_pca_transcriptomics",
             used_obsm_morphology: str = "X_pca_morphology",
             used_obsm_combined: str = "X_pca",
-            used_obs_batch: Optional[str] = None,
+            used_obs_sample: Optional[str] = None,
             validation_split: float = 0.0,
             early_stopping_params: Optional[dict] = None
             ) -> None:
@@ -198,7 +198,7 @@ class AESTETIK:
             Key for morphology data in `obsm`.
         used_obsm_combined : str, optional (default="X_pca")
             Key for combined data in `obsm`.
-        used_obs_batch: Optional[str], optional (default=None)
+        used_obs_sample: Optional[str], optional (default=None)
             Key for column in `obs` that contains sample labels.
         validation_split : float, optional (default=0.0)
             Size of the validation set. It should be between 0.0 and 1.0 and represent the proportion of the dataset to include in the validation split.
@@ -218,7 +218,7 @@ class AESTETIK:
                                         used_obsm_transcriptomics=used_obsm_transcriptomics,
                                         used_obsm_morphology=used_obsm_morphology,
                                         used_obsm_combined=used_obsm_combined,
-                                        used_obs_batch=used_obs_batch,
+                                        used_obs_sample=used_obs_sample,
                                         dataloader_params=self.dataloader_params,
                                         clustering_params=self.clustering_params,
                                         grid_params=self.grid_params,
@@ -233,7 +233,8 @@ class AESTETIK:
         logging.info("Fit AESTETIKModel ...")
         self.trainer = Trainer(max_epochs=self.training_params["max_epochs"],
                                 callbacks=callbacks,
-                                num_sanity_val_steps=0)
+                                num_sanity_val_steps=0,
+                                logger=False)
         self.trainer.fit(self.lit_aestetik_model, datamodule=datamodule)
         self.losses = callbacks[0].losses
 
@@ -241,7 +242,7 @@ class AESTETIK:
                 X: anndata.AnnData,
                 used_obsm_transcriptomics: str = "X_pca_transcriptomics",
                 used_obsm_morphology: str = "X_pca_morphology",
-                used_obs_batch: Optional[str] = None,
+                used_obs_sample: Optional[str] = None,
                 save_emb: str = "AESTETIK",
                 num_repeats: int = 1000,
                 cluster: bool = True) -> None:
@@ -258,7 +259,7 @@ class AESTETIK:
             Key for transcriptomics data in `obsm`.
         used_obsm_morphology : str, optional (default="X_pca_morphology")
             Key for morphology data in `obsm`.
-        used_obs_batch: Optional[str], optional (default=None)
+        used_obs_sample: Optional[str], optional (default=None)
             Key for column in `obs` that contains sample labels.
         save_emb : str, optional (default="AESTETIK")
             Key for saving embeddings.
@@ -274,20 +275,21 @@ class AESTETIK:
         all_latent_space = self._compute_latent_space(X,
                                                       used_obsm_transcriptomics=used_obsm_transcriptomics,
                                                       used_obsm_morphology=used_obsm_morphology,
-                                                      used_obs_batch=used_obs_batch)
+                                                      used_obs_sample=used_obs_sample)
         self._postprocess_predictions(X,
                                       latent_space=all_latent_space,
                                       save_emb=save_emb,
                                       cluster=cluster,
-                                      used_obs_batch=used_obs_batch)
+                                      used_obs_sample=used_obs_sample)
     
     def fit_predict(self,
                     X: anndata.AnnData,
                     used_obsm_transcriptomics: str = "X_pca_transcriptomics",
                     used_obsm_morphology: str = "X_pca_morphology",
                     used_obsm_combined: str = "X_pca",
-                    used_obs_batch: Optional[str] = None,
+                    used_obs_sample: Optional[str] = None,
                     validation_split: float = 0.0,
+                    early_stopping_params: Optional[dict] = None,
                     save_emb: str = "AESTETIK",
                     num_repeats: int = 1000,
                     cluster: bool = True) -> None:
@@ -304,10 +306,14 @@ class AESTETIK:
             Key for morphology data in `obsm`.
         used_obsm_combined : str, optional (default="X_pca")
             Key for combined data in `obsm`.
-        used_obs_batch: Optional[str], optional (default=None)
+        used_obs_sample: Optional[str], optional (default=None)
             Key for column in `obs` that contains sample labels.
         validation_split : float, optional (default=0.0)
             Size of the validation set. It should be between 0.0 and 1.0 and represent the proportion of the dataset to include in the validation split.
+        early_stopping_params : dict, optional
+            Dictionary with parameters for EarlyStopping callback. Optional keys:
+                - 'min_delta': float (default=0.0)
+                - 'patience': int (default=3)
         save_emb : str, optional (default="AESTETIK")
             Key for saving embeddings.
         num_repeats: int, optional (default=1000)
@@ -319,8 +325,9 @@ class AESTETIK:
                  used_obsm_transcriptomics=used_obsm_transcriptomics,
                  used_obsm_morphology=used_obsm_morphology,
                  used_obsm_combined=used_obsm_combined,
-                 used_obs_batch=used_obs_batch,
-                 validation_split=validation_split)
+                 used_obs_sample=used_obs_sample,
+                 validation_split=validation_split,
+                 early_stopping_params=early_stopping_params)
                     
         self._set_predict_params(num_repeats=num_repeats)
         all_latent_space = self._compute_latent_space(X,
@@ -329,7 +336,7 @@ class AESTETIK:
                                       latent_space=all_latent_space,
                                       save_emb=save_emb,
                                       cluster=cluster,
-                                      used_obs_batch=used_obs_batch)
+                                      used_obs_sample=used_obs_sample)
 
     # ================================================================= #
     #                      Private Validation Methods                   #
@@ -429,14 +436,14 @@ class AESTETIK:
         X: anndata.AnnData,
         used_obsm_transcriptomics: Optional[str] = None,
         used_obsm_morphology: Optional[str] = None,
-        used_obs_batch: Optional[str] = None,
+        used_obs_sample: Optional[str] = None,
         built_grid: bool = False) -> DataLoader:
         
         if not built_grid:
             build_grid(X, 
                    used_obsm_transcriptomics=used_obsm_transcriptomics,
                    used_obsm_morphology=used_obsm_morphology,
-                   used_obs_batch=used_obs_batch,
+                   used_obs_sample=used_obs_sample,
                    window_size=self.grid_params["morphology_dim"],
                    n_jobs=self.data_handling_params["n_jobs"])
         
@@ -490,12 +497,12 @@ class AESTETIK:
                               X: anndata.AnnData, 
                               used_obsm_transcriptomics: Optional[str] = None,
                               used_obsm_morphology: Optional[str] = None,
-                              used_obs_batch: Optional[str] = None,
+                              used_obs_sample: Optional[str] = None,
                               built_grid = False) -> np.ndarray:
         predict_dataloader = self._create_predict_dataloader(X,
                                                              used_obsm_transcriptomics=used_obsm_transcriptomics,
                                                              used_obsm_morphology=used_obsm_morphology,
-                                                             used_obs_batch=used_obs_batch,
+                                                             used_obs_sample=used_obs_sample,
                                                              built_grid=built_grid)
         all_latent_space = self.trainer.predict(self.lit_aestetik_model,
                                                 dataloaders=predict_dataloader)
@@ -507,7 +514,7 @@ class AESTETIK:
                                  latent_space: np.ndarray,
                                  save_emb:str,
                                  cluster: bool,
-                                 used_obs_batch: str) -> None:
+                                 used_obs_sample: str) -> None:
         X.obsm[save_emb] = latent_space.cpu().numpy()
         
         if cluster:
@@ -517,7 +524,7 @@ class AESTETIK:
             method=self.clustering_params["clustering_method"],
             refine_cluster=self.clustering_params["refine_cluster"],
             n_neighbors=self.clustering_params["n_neighbors"],
-            used_obs_batch=used_obs_batch)
+            used_obs_sample=used_obs_sample)
 
     # ================================================================= #
     #                       Model Construction                          #

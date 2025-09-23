@@ -148,7 +148,7 @@ def clustering(
         start=0.1,
         end=3,
         increment=0.02,
-        used_obs_batch=None):
+        used_obs_sample=None):
 
     if method == 'leiden':
         if isinstance(num_cluster, int):
@@ -204,7 +204,7 @@ def clustering(
         _refine_cluster(
             adata=adata,
             used_obsm=used_obsm,
-            used_obs_batch=used_obs_batch,
+            used_obs_sample=used_obs_sample,
             n_neighbors=n_neighbors,
             conf_proba=conf_proba
         )
@@ -212,7 +212,7 @@ def clustering(
 def _refine_cluster(
     adata: anndata.AnnData,
     used_obsm: str,
-    used_obs_batch: Optional[str],
+    used_obs_sample: Optional[str],
     n_neighbors: int,
     conf_proba: float
 ):
@@ -220,9 +220,9 @@ def _refine_cluster(
     proba_col = f"{used_obsm}_cluster_proba"
     spatial_cols = ["x_array", "y_array"]
 
-    if used_obs_batch is not None:
-        for batch_id in adata.obs[used_obs_batch].unique():
-            mask = adata.obs[used_obs_batch] == batch_id
+    if used_obs_sample is not None:
+        for sample_id in adata.obs[used_obs_sample].unique():
+            mask = adata.obs[used_obs_sample] == sample_id
             df = adata.obs.loc[mask]
             refined = _refine(
                 df,

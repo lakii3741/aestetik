@@ -23,7 +23,7 @@ def prepare_input_for_model(
         n_jobs: int,
         total_weight: float,
         morphology_weight: float,
-        used_obs_batch: Optional[str] = None,
+        used_obs_sample: Optional[str] = None,
         **kwargs) -> Tuple[float, float]:
         """
         Prepare the input for training the model.
@@ -36,7 +36,7 @@ def prepare_input_for_model(
             adata=adata,
             num_cluster=nCluster,
             used_obsm=used_obsm_transcriptomics,
-            used_obs_batch=used_obs_batch,
+            used_obs_sample=used_obs_sample,
             method=clustering_method,
             n_neighbors=n_neighbors,
             refine_cluster=0)
@@ -45,7 +45,7 @@ def prepare_input_for_model(
             adata=adata,
             num_cluster=nCluster,
             used_obsm=used_obsm_morphology,
-            used_obs_batch=used_obs_batch,
+            used_obs_sample=used_obs_sample,
             method=clustering_method,
             n_neighbors=n_neighbors,
             refine_cluster=0)
@@ -67,7 +67,7 @@ def prepare_input_for_model(
                    used_obsm_morphology=used_obsm_morphology,
                    window_size=window_size,
                    n_jobs=n_jobs,
-                   used_obs_batch=used_obs_batch)
+                   used_obs_sample=used_obs_sample)
 
         return transcriptomics_weight, morphology_weight
 
@@ -76,14 +76,14 @@ def build_grid(adata: anndata,
                used_obsm_morphology: str,
                window_size: int,
                n_jobs: int,
-               used_obs_batch: Optional[str] = None) -> None:
+               used_obs_sample: Optional[str] = None) -> None:
     logging.info("Computing transcriptomics grid...")
     X_st_grid_transcriptomics = create_st_grid(
-    adata, used_obsm=used_obsm_transcriptomics, window_size=window_size, cpu_count=n_jobs, used_obs_batch=used_obs_batch)
+    adata, used_obsm=used_obsm_transcriptomics, window_size=window_size, cpu_count=n_jobs, used_obs_sample=used_obs_sample)
         
     logging.info("Computing morphology grid...")
     X_st_grid_morphology = create_st_grid(
-    adata, used_obsm=used_obsm_morphology, window_size=window_size, cpu_count=n_jobs, used_obs_batch=used_obs_batch)
+    adata, used_obsm=used_obsm_morphology, window_size=window_size, cpu_count=n_jobs, used_obs_sample=used_obs_sample)
 
     adata.obsm["X_st_grid"] = np.concatenate(
     (X_st_grid_transcriptomics, X_st_grid_morphology), axis=1)
