@@ -186,9 +186,13 @@ def clustering(
             adata.obsm[used_obsm]).labels_
         adata.obs[f"{used_obsm}_cluster"] = clusters.astype(str)
     elif method == "bgm":
+        if used_obs_sample is None:
+            init_params="random" # original initialization from original paper
+        else:
+            init_params="k-means++" # more stable initialization for multi-sample integration
         bgm = BayesianGaussianMixture(
             n_components=num_cluster,
-            init_params="random",
+            init_params=init_params,
             covariance_type="tied",
             max_iter=1000,
             n_init=10,
