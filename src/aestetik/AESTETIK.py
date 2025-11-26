@@ -236,7 +236,8 @@ class AESTETIK:
                                 num_sanity_val_steps=0,
                                 logger=False)
         self.trainer.fit(self.lit_aestetik_model, datamodule=datamodule)
-        self.losses = callbacks[0].losses
+        self.train_losses = callbacks[0].train_losses
+        self.val_losses = callbacks[0].val_losses
 
     def predict(self,
                 X: anndata.AnnData,
@@ -518,6 +519,7 @@ class AESTETIK:
         X.obsm[save_emb] = latent_space.cpu().numpy()
         
         if cluster:
+            print(f"Perform clustering on spot representations with {self.clustering_params['clustering_method']}")
             clustering(X,
             used_obsm=save_emb,
             num_cluster=self.clustering_params["nCluster"],

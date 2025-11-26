@@ -78,7 +78,7 @@ def visualize(model: AESTETIK,
                                   plot_clusters=plot_clusters,
                                   plot_centroid=plot_centroid)
         if plot_loss:
-            _plot_loss_values(model.losses)
+            _plot_loss_values(model.train_losses)
         if plot_clusters:
             _plot_spatial_scatter_ari(adata,
                                       used_obsm_transcriptomics,
@@ -104,10 +104,13 @@ def visualize(model: AESTETIK,
 # ================================================================= #
 #                    Private Plotting Methods                       #
 # ================================================================= # 
-def _plot_loss_values(losses):
-    plt.xlabel('Iterations')
+def _plot_loss_values(train_losses):
+    epochs = range(1, len(train_losses) + 1)
+    plt.plot(epochs, train_losses, label='Training Loss')
+    plt.xlabel('Iterations/Epochs')
     plt.ylabel('Loss')
-    plt.plot(losses)
+    plt.title('Training Loss')
+    plt.legend()
     plt.show()
 
 

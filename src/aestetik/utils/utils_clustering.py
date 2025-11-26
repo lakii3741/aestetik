@@ -80,62 +80,114 @@ def find_optimal_n_clusters(adata, start=2, end=10, suggested_n=None):
     print(p)
 
 
+# def search_res(
+#         adata,
+#         n_clusters,
+#         method='leiden',
+#         use_rep='emb',
+#         start=0.01,
+#         end=2.0,
+#         increment=0.01):
+#     '''\
+#     Searching corresponding resolution according to given cluster number
+
+#     Parameters
+#     ----------
+#     adata : anndata
+#         AnnData object of spatial data.
+#     n_clusters : int
+#         Targetting number of clusters.
+#     method : string
+#         Tool for clustering. Supported tools include 'leiden' and 'louvain'. The default is 'leiden'.
+#     use_rep : string
+#         The indicated representation for clustering.
+#     start : float
+#         The start value for searching.
+#     end : float
+#         The end value for searching.
+#     increment : float
+#         The step size to increase.
+
+#     Returns
+#     -------
+#     res : float
+#         Resolution.
+
+#     '''
+#     print('Searching resolution...')
+#     label = 0
+#     sc.pp.neighbors(adata, n_neighbors=50, use_rep=use_rep)
+#     for res in sorted(list(np.arange(start, end, increment)), reverse=False):
+#         if method == 'leiden':
+#             sc.tl.leiden(adata, random_state=0, resolution=res)
+#             count_unique = len(
+#                 pd.DataFrame(
+#                     adata.obs['leiden']).leiden.unique())
+#             print('resolution={}, cluster number={}'.format(res, count_unique))
+#         elif method == 'louvain':
+#             sc.tl.louvain(adata, random_state=0, resolution=res)
+#             count_unique = len(
+#                 pd.DataFrame(
+#                     adata.obs['louvain']).louvain.unique())
+#             print('resolution={}, cluster number={}'.format(res, count_unique))
+
+#         if count_unique >= n_clusters:
+#             if count_unique > n_clusters:
+#                 print(f"Warning: Even at the lowest resolution ({start}), Leiden clustering yielded {count_unique} clusters, exceeding the requested {n_clusters}. Consider merging clusters or tuning parameters.")
+#             break
+#     return res
+
 def search_res(
-        adata,
-        n_clusters,
-        method='leiden',
-        use_rep='emb',
-        start=0.01,
-        end=2.0,
-        increment=0.01):
-    '''\
-    Searching corresponding resolution according to given cluster number
-
-    Parameters
-    ----------
-    adata : anndata
-        AnnData object of spatial data.
-    n_clusters : int
-        Targetting number of clusters.
-    method : string
-        Tool for clustering. Supported tools include 'leiden' and 'louvain'. The default is 'leiden'.
-    use_rep : string
-        The indicated representation for clustering.
-    start : float
-        The start value for searching.
-    end : float
-        The end value for searching.
-    increment : float
-        The step size to increase.
-
-    Returns
-    -------
-    res : float
-        Resolution.
-
-    '''
-    print('Searching resolution...')
-    label = 0
+    adata,
+    n_clusters,
+    method='leiden',
+    use_rep='emb',
+    start=0,
+    end=2.0,
+    tol=0.0001,
+    max_iter=25,
+    increment=0.01 
+):
+    low, high = start, end
+    print('Searching resolution via binary search...')
     sc.pp.neighbors(adata, n_neighbors=50, use_rep=use_rep)
-    for res in sorted(list(np.arange(start, end, increment)), reverse=False):
+
+    def cluster_count(res):
         if method == 'leiden':
             sc.tl.leiden(adata, random_state=0, resolution=res)
-            count_unique = len(
-                pd.DataFrame(
-                    adata.obs['leiden']).leiden.unique())
-            print('resolution={}, cluster number={}'.format(res, count_unique))
+            return adata.obs['leiden'].nunique()
         elif method == 'louvain':
             sc.tl.louvain(adata, random_state=0, resolution=res)
-            count_unique = len(
-                pd.DataFrame(
-                    adata.obs['louvain']).louvain.unique())
-            print('resolution={}, cluster number={}'.format(res, count_unique))
+            return adata.obs['louvain'].nunique()
+        else:
+            raise ValueError(f"Unsupported method: {method}")
 
-        if count_unique == n_clusters:
+    best_res, best_diff = None, float('inf')
+
+    for i in range(max_iter):
+        mid = (low + high) / 2
+        count = cluster_count(mid)
+        diff = abs(count - n_clusters)
+
+        print(f"Iter {i+1}: resolution={mid:.4f}, clusters={count}")
+
+        if diff < best_diff:
+            best_diff = diff
+            best_res = mid
+
+        if count < n_clusters:
+            low = mid
+        elif count > n_clusters:
+            high = mid
+        else:
+            print("Exact match found.")
+            return mid
+
+        if (high - low) < tol:
             break
 
-    return res
-
+    print(f"Best resolution ≈ {best_res:.4f} (clusters={cluster_count(best_res)})")
+    return best_res
 
 def clustering(
         adata,
@@ -145,7 +197,7 @@ def clustering(
         refine_cluster=False,
         n_neighbors=15,
         conf_proba=0.9,
-        start=0.1,
+        start=0,
         end=3,
         increment=0.02,
         used_obs_sample=None):
@@ -187,15 +239,19 @@ def clustering(
         adata.obs[f"{used_obsm}_cluster"] = clusters.astype(str)
     elif method == "bgm":
         if used_obs_sample is None:
-            init_params="random" # original initialization from original paper
+            # settings from original paper
+            init_params="random"
+            n_init=10
         else:
-            init_params="k-means++" # more stable initialization for multi-sample integration
+            # for multi-sample integration
+            init_params="random"
+            n_init=15
         bgm = BayesianGaussianMixture(
             n_components=num_cluster,
             init_params=init_params,
             covariance_type="tied",
             max_iter=1000,
-            n_init=10,
+            n_init=n_init,
             random_state=0
         ).fit(
             adata.obsm[used_obsm])
